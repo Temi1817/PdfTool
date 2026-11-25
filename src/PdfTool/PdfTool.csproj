@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <AssemblyTitle>PdfTool</AssemblyTitle>
+    <Product>PdfTool</Product>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PdfTools.Core\PdfTools.Core.csproj" />
+  </ItemGroup>
+
+  <!-- В пакет SkiaSharp входит отладочный libSkiaSharp.pdb (~87 МБ) — в публикации он не нужен -->
+  <Target Name="RemoveDebugSymbolsFromPublish" AfterTargets="Publish">
+    <Delete Files="$(PublishDir)libSkiaSharp.pdb" />
+  </Target>
+
+</Project>

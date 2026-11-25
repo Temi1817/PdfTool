@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PdfTools.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ВНИМАНИЕ: не обновлять выше 6.2.x — начиная с 6.5.0 PDFsharp распространяется под AGPL-3.0 -->
+    <PackageReference Include="PDFsharp" Version="[6.2.4]" />
+    <PackageReference Include="PDFtoImage" Version="5.4.0" />
+  </ItemGroup>
+
+</Project>
