@@ -26,6 +26,7 @@ internal sealed partial class MainForm : Form
     {
         _btnOpen.Click += async (_, _) => await OpenWithDialogAsync();
         _btnAppend.Click += async (_, _) => await AppendWithDialogAsync();
+        _btnClear.Click += async (_, _) => await ClearDocumentAsync();
         _btnSave.ButtonClick += async (_, _) => await SaveAsync();
         _miSaveAs.Click += async (_, _) => await SaveAsAsync();
         _btnRotateLeft.Click += (_, _) => RotateSelected(-90);
@@ -72,6 +73,7 @@ internal sealed partial class MainForm : Form
         switch (keyData)
         {
             case Keys.Control | Keys.O: _btnOpen.PerformClick(); return true;
+            case Keys.Control | Keys.W: if (_btnClear.Enabled) _btnClear.PerformClick(); return true;
             case Keys.Control | Keys.S: if (_btnSave.Enabled) _btnSave.PerformButtonClick(); return true;
             case Keys.Control | Keys.Shift | Keys.S: if (_miSaveAs.Enabled) _miSaveAs.PerformClick(); return true;
             case Keys.Control | Keys.Z when !inText: if (_btnUndo.Enabled) Undo(); return true;
@@ -115,6 +117,18 @@ internal sealed partial class MainForm : Form
         _model = model;
         _sourceOverwriteConfirmed = false;
         _view.SetDocument(model);
+        UpdateUiState();
+    }
+
+    /// <summary>Закрывает документ (файл на диске не трогается) и возвращает пустое окно.</summary>
+    private async Task ClearDocumentAsync()
+    {
+        if (_model == null || !await ConfirmDiscardChangesAsync()) return;
+        _model = null;
+        _sourceOverwriteConfirmed = false;
+        _txtRanges.Clear();
+        _lblRender.Text = "";
+        _view.SetDocument(null);
         UpdateUiState();
     }
 
@@ -452,6 +466,7 @@ internal sealed partial class MainForm : Form
 
         _btnOpen.Enabled = !_busy;
         _btnAppend.Enabled = hasDoc;
+        _btnClear.Enabled = hasDoc;
         _btnSave.Enabled = hasDoc;
         _miSaveAs.Enabled = hasDoc;
         _btnRotateLeft.Enabled = hasSelection;

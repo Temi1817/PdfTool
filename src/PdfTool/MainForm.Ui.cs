@@ -6,6 +6,7 @@ internal sealed partial class MainForm
     private readonly ToolStrip _toolStrip = new();
     private readonly ToolStripButton _btnOpen = new("Открыть");
     private readonly ToolStripButton _btnAppend = new("Добавить PDF");
+    private readonly ToolStripButton _btnClear = new("Очистить");
     private readonly ToolStripSplitButton _btnSave = new("Сохранить");
     private readonly ToolStripMenuItem _miSaveAs = new("Сохранить как…");
     private readonly ToolStripButton _btnRotateLeft = new("⟲ Влево");
@@ -50,6 +51,7 @@ internal sealed partial class MainForm
         _toolStrip.Padding = new Padding(4, 2, 4, 2);
         _btnOpen.ToolTipText = "Открыть PDF (Ctrl+O)";
         _btnAppend.ToolTipText = "Добавить страницы другого PDF в конец документа";
+        _btnClear.ToolTipText = "Закрыть текущий PDF, чтобы открыть другой (Ctrl+W)";
         _btnSave.ToolTipText = "Сохранить (Ctrl+S)";
         _miSaveAs.ShortcutKeyDisplayString = "Ctrl+Shift+S";
         _btnSave.DropDownItems.Add(_miSaveAs);
@@ -62,7 +64,7 @@ internal sealed partial class MainForm
 
         _toolStrip.Items.AddRange(new ToolStripItem[]
         {
-            _btnOpen, _btnAppend, _btnSave,
+            _btnOpen, _btnAppend, _btnSave, _btnClear,
             new ToolStripSeparator(),
             _btnRotateLeft, _btnRotateRight, _btnDelete,
             new ToolStripSeparator(),
