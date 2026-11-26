@@ -8,6 +8,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <AssemblyTitle>PdfTool</AssemblyTitle>
     <Product>PdfTool</Product>
     <Version>1.0.0</Version>

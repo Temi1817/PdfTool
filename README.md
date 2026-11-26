@@ -59,6 +59,22 @@ dotnet publish src/PdfTool/PdfTool.csproj -c Release -r win-x64 --self-contained
 
 Чтобы программа запускалась без установленного .NET, укажите `--self-contained true` (папка станет больше).
 
+### Установщик
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-installer.ps1
+```
+
+Скрипт прогоняет тесты, публикует self-contained версию в `publish\` и собирает `dist\PdfTool-Setup-1.0.0.exe` через [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`). Описание установщика лежит в `installer\PdfTool.iss`; этот файл и скрипт сохранены в UTF-8 с BOM.
+
+Что делает установщик:
+- ставит программу в `%LocalAppData%\Programs\PdfTool`, права администратора не нужны, .NET на компьютере не нужен;
+- создаёт ярлык в «Пуск» и, по желанию, на рабочем столе;
+- по желанию добавляет PdfTool в «Открыть с помощью» для PDF, Word и картинок (только для текущего пользователя, программа по умолчанию не меняется);
+- при удалении всё убирает, но `%AppData%\PdfTool` (последние файлы, подписи) сохраняет.
+
+Версия задаётся в `installer\PdfTool.iss` (`AppVersion`) и в `src\PdfTool\PdfTool.csproj` (`Version`).
+
 ## Структура
 
 ```

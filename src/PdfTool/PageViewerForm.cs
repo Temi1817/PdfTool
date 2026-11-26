@@ -36,6 +36,7 @@ internal sealed class PageViewerForm : Form
 
         Text = $"{Path.GetFileName(model.FilePath)} — просмотр";
         Font = SystemFonts.MessageBoxFont ?? Font;
+        if (Program.AppIcon != null) Icon = Program.AppIcon;
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(1000, 800);
         WindowState = FormWindowState.Maximized;

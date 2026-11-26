@@ -2,6 +2,15 @@ namespace PdfTool;
 
 internal static class Program
 {
+    /// <summary>Иконка приложения (из exe) — для заголовков всех окон.</summary>
+    internal static readonly Icon? AppIcon = LoadIcon();
+
+    private static Icon? LoadIcon()
+    {
+        try { return Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+        catch { return null; }
+    }
+
     [STAThread]
     private static void Main(string[] args)
     {

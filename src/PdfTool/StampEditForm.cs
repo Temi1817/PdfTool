@@ -39,6 +39,7 @@ internal sealed class StampEditForm : Form
 
         Text = "Обрезать / стереть";
         Font = SystemFonts.MessageBoxFont ?? Font;
+        if (Program.AppIcon != null) Icon = Program.AppIcon;
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(900, 760);
         MinimumSize = new Size(500, 400);

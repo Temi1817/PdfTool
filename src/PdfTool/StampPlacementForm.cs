@@ -31,6 +31,7 @@ internal sealed class StampPlacementForm : Form
 
         Text = $"Подпись / печать — {fileName}";
         Font = SystemFonts.MessageBoxFont ?? Font;
+        if (Program.AppIcon != null) Icon = Program.AppIcon;
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(1000, 860);
         MinimumSize = new Size(600, 500);

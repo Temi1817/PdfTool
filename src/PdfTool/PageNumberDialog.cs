@@ -31,6 +31,7 @@ internal sealed class PageNumberDialog : Form
         _pageCount = pageCount;
         Text = "Нумерация страниц";
         Font = SystemFonts.MessageBoxFont ?? Font;
+        if (Program.AppIcon != null) Icon = Program.AppIcon;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
         ShowInTaskbar = false;

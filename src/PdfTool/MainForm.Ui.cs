@@ -48,6 +48,7 @@ internal sealed partial class MainForm
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96F, 96F);
         Font = SystemFonts.MessageBoxFont ?? Font;
+        if (Program.AppIcon != null) Icon = Program.AppIcon;
         MinimumSize = new Size(640, 420);
         Size = new Size(1100, 760);
         StartPosition = FormStartPosition.CenterScreen;
