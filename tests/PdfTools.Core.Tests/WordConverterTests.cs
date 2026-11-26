@@ -38,16 +38,29 @@ public class WordConverterTests : IDisposable
         Assert.Equal(PdfErrorKind.NotFound, ex.Kind);
     }
 
+    [Theory]
+    [InlineData("отчёт.docx", true)]
+    [InlineData("C:\\папка\\СТАРЫЙ.DOC", true)]
+    [InlineData("письмо.rtf", true)]
+    [InlineData("шаблон.docm", true)]
+    [InlineData("файл.odt", true)]
+    [InlineData("скан.pdf", false)]
+    [InlineData("таблица.xlsx", false)]
+    [InlineData("без_расширения", false)]
+    public void IsWordFile_detects_by_extension(string path, bool expected)
+    {
+        Assert.Equal(expected, WordConverter.IsWordFile(path));
+    }
+
     [WordFact]
-    public void Docx_from_our_converter_goes_back_to_pdf_without_leftover_Word()
+    public void Word_document_becomes_pdf_without_leftover_Word()
     {
         var wordBefore = Process.GetProcessesByName("WINWORD").Select(p => p.Id).ToHashSet();
-        var model = PdfDocumentModel.Open(TestPdf.CreateMixed(_tmp.Path, "Документ.pdf", "text", "heading"));
-        var docx = Path.Combine(_tmp.Path, "Документ.docx");
-        PdfToDocxConverter.Convert(model, docx);
+        var rtf = Path.Combine(_tmp.Path, "Документ.rtf");
+        File.WriteAllText(rtf, @"{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs28 Hello PdfTool\par}");
 
-        var pdf = Path.Combine(_tmp.Path, "Обратно.pdf");
-        WordConverter.WordToPdf(docx, pdf);
+        var pdf = Path.Combine(_tmp.Path, "Документ.pdf");
+        WordConverter.WordToPdf(rtf, pdf);
 
         Assert.True(PdfDocumentModel.Open(pdf).PageCount >= 1);
         Assert.Empty(Directory.GetFiles(_tmp.Path, ".*.tmp*"));

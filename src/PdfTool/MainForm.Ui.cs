@@ -18,7 +18,6 @@ internal sealed partial class MainForm
     private readonly ToolStripMenuItem _miSplitRanges = new("По диапазонам (поле внизу)…");
     private readonly ToolStripButton _btnUndo = new("Отменить");
     private readonly ToolStripButton _btnSelectAll = new("Выделить всё");
-    private readonly ToolStripButton _btnPdfToWord = new("PDF → Word");
     private readonly ToolStripButton _btnWordToPdf = new("Word → PDF");
 
     private readonly ThumbnailView _view = new();
@@ -74,7 +73,7 @@ internal sealed partial class MainForm
             new ToolStripSeparator(),
             _btnUndo, _btnSelectAll,
             new ToolStripSeparator(),
-            _btnPdfToWord, _btnWordToPdf
+            _btnWordToPdf
         });
 
         // ── Миниатюры ──
@@ -82,7 +81,7 @@ internal sealed partial class MainForm
         _emptyHint.Dock = DockStyle.Fill;
         _emptyHint.TextAlign = ContentAlignment.MiddleCenter;
         _emptyHint.ForeColor = SystemColors.GrayText;
-        _emptyHint.Text = "Перетащите PDF-файл сюда\nили нажмите «Открыть»";
+        _emptyHint.Text = "Перетащите сюда PDF или документ Word\nили нажмите «Открыть»";
         _emptyHint.Font = new Font(Font.FontFamily, Font.Size * 1.4f);
         _emptyHint.AllowDrop = true;
         _view.Controls.Add(_emptyHint);

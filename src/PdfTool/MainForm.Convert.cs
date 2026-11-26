@@ -1,95 +1,108 @@
-using System.Diagnostics;
 using PdfTools.Core;
 
 namespace PdfTool;
 
-/// <summary>Конвертация Word ↔ PDF через установленный Microsoft Word.</summary>
+/// <summary>
+/// Документы Word: превращаются в PDF через установленный Microsoft Word
+/// и дальше открываются как обычные PDF (кнопкой, через «Открыть» или перетаскиванием).
+/// </summary>
 internal sealed partial class MainForm
 {
-    private const string WordFilter =
-        "Документы Word (*.docx;*.doc;*.rtf)|*.docx;*.doc;*.docm;*.rtf;*.odt|Все файлы (*.*)|*.*";
+    private const string WordPattern = "*.docx;*.doc;*.docm;*.rtf;*.odt";
+    private const string WordFilter = $"Документы Word ({WordPattern})|{WordPattern}|Все файлы (*.*)|*.*";
+    // Для «Открыть» и «Добавить PDF»: можно выбрать и PDF, и Word
+    private const string OpenFilter =
+        $"PDF и документы Word|*.pdf;{WordPattern}|PDF-файлы (*.pdf)|*.pdf|Документы Word|{WordPattern}|Все файлы (*.*)|*.*";
 
     private readonly bool _wordInstalled = WordConverter.IsWordInstalled();
 
     private void SetupConvertButtons()
     {
-        _btnPdfToWord.Click += async (_, _) => await PdfToWordAsync();
-        _btnWordToPdf.Click += async (_, _) => await WordToPdfAsync();
-
-        _btnPdfToWord.ToolTipText = "Сохранить текущий документ как файл Word (.docx)";
-        _btnWordToPdf.ToolTipText = "Превратить документ Word в PDF и открыть его" +
-                                    (_wordInstalled ? "" : "\nНужен установленный Microsoft Word");
+        _btnWordToPdf.Click += async (_, _) => await WordToPdfWithDialogAsync();
+        _btnWordToPdf.ToolTipText = _wordInstalled
+            ? "Превратить документ Word в PDF и открыть его.\nМожно просто перетащить файл Word в окно."
+            : "Нужен установленный Microsoft Word";
     }
 
-    private void UpdateConvertButtons(bool hasDoc)
+    private void UpdateConvertButtons() => _btnWordToPdf.Enabled = !_busy && _wordInstalled;
+
+    private async Task WordToPdfWithDialogAsync()
     {
-        _btnPdfToWord.Enabled = hasDoc; // своя конвертация, Word не нужен
-        _btnWordToPdf.Enabled = !_busy && _wordInstalled;
+        using var dlg = new OpenFileDialog { Filter = WordFilter, Title = "Выберите документ Word" };
+        if (dlg.ShowDialog(this) == DialogResult.OK) await OpenAnyFileAsync(dlg.FileName);
     }
 
-    private async Task PdfToWordAsync()
+    /// <summary>Открывает PDF, а документ Word сначала превращает в PDF.</summary>
+    private async Task OpenAnyFileAsync(string path)
     {
-        if (_model == null) return;
-        var model = _model;
+        var pdfs = await PrepareFilesAsync(new[] { path });
+        if (pdfs.Length > 0) await OpenFileAsync(pdfs[0]);
+    }
+
+    /// <summary>
+    /// Документы Word превращает в PDF, остальные файлы возвращает как есть.
+    /// Файлы, которые не удалось сконвертировать, пропускаются (ошибка уже показана).
+    /// </summary>
+    private async Task<string[]> PrepareFilesAsync(IEnumerable<string> files)
+    {
+        var result = new List<string>();
+        foreach (var file in files)
+        {
+            if (!WordConverter.IsWordFile(file))
+            {
+                result.Add(file);
+                continue;
+            }
+            var pdf = await ConvertWordToPdfAsync(file);
+            if (pdf != null) result.Add(pdf);
+        }
+        return result.ToArray();
+    }
+
+    /// <summary>Конвертирует документ Word в PDF рядом с ним. Возвращает путь к PDF или null.</summary>
+    private async Task<string?> ConvertWordToPdfAsync(string wordPath)
+    {
+        var name = Path.GetFileName(wordPath);
+        if (!_wordInstalled)
+        {
+            ShowWarning($"«{name}» — документ Word.\nЧтобы превратить его в PDF, нужен установленный Microsoft Word.");
+            return null;
+        }
+
+        var target = AskPdfPathFor(wordPath);
+        if (target == null) return null;
+
+        var ok = await RunBusyAsync($"«{name}» → PDF через Word…",
+            () => { WordConverter.WordToPdf(wordPath, target); return true; });
+        if (!ok) return null;
+        _lblRender.Text = $"Создан PDF: {Path.GetFileName(target)}";
+        return target;
+    }
+
+    /// <summary>
+    /// Куда сохранить PDF: рядом с документом, с тем же именем.
+    /// Если такой файл уже есть — спрашиваем: перезаписать или выбрать другое имя.
+    /// </summary>
+    private string? AskPdfPathFor(string wordPath)
+    {
+        var target = Path.ChangeExtension(Path.GetFullPath(wordPath), ".pdf");
+        if (!File.Exists(target)) return target;
+
+        var answer = MessageBox.Show(this,
+            $"Рядом уже есть файл «{Path.GetFileName(target)}».\n\n" +
+            "Да — перезаписать его\nНет — сохранить под другим именем",
+            "Word → PDF", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+        if (answer == DialogResult.Yes) return target;
+        if (answer != DialogResult.No) return null;
 
         using var dlg = new SaveFileDialog
         {
-            Filter = "Документ Word (*.docx)|*.docx",
-            Title = "Сохранить как документ Word",
-            InitialDirectory = Path.GetDirectoryName(model.FilePath),
-            FileName = model.BaseName + ".docx",
-            OverwritePrompt = true
-        };
-        if (dlg.ShowDialog(this) != DialogResult.OK) return;
-        var path = dlg.FileName;
-
-        var result = await RunBusyAsync("Конвертация в Word…",
-            () => PdfToDocxConverter.Convert(model, path));
-        if (result == null) return;
-
-        _lblRender.Text = $"Создан: {Path.GetFileName(path)}";
-        var scans = result.PagesAsImages == 0
-            ? ""
-            : $"Страниц без текста (сканы): {result.PagesAsImages} — вставлены картинками, их текст править нельзя.\n\n";
-        var answer = MessageBox.Show(this,
-            $"Готово: {Path.GetFileName(path)}\n\n{scans}" +
-            "Текст можно редактировать. Сложная вёрстка (колонки, текст поверх картинок) упрощается.\n\n" +
-            "Открыть документ?",
-            "PDF → Word", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
-        if (answer == DialogResult.Yes) OpenWithShell(path);
-    }
-
-    private async Task WordToPdfAsync()
-    {
-        using var open = new OpenFileDialog { Filter = WordFilter, Title = "Выберите документ Word" };
-        if (open.ShowDialog(this) != DialogResult.OK) return;
-        var source = open.FileName;
-
-        using var save = new SaveFileDialog
-        {
             Filter = PdfFilter,
             Title = "Сохранить PDF",
-            InitialDirectory = Path.GetDirectoryName(source),
-            FileName = Path.GetFileNameWithoutExtension(source) + ".pdf",
+            InitialDirectory = Path.GetDirectoryName(target),
+            FileName = Path.GetFileNameWithoutExtension(target) + "_1.pdf",
             OverwritePrompt = true
         };
-        if (save.ShowDialog(this) != DialogResult.OK) return;
-        var target = save.FileName;
-
-        var ok = await RunBusyAsync("Конвертация в PDF…",
-            () => { WordConverter.WordToPdf(source, target); return true; });
-        if (ok) await OpenFileAsync(target); // сразу открываем результат
-    }
-
-    private void OpenWithShell(string path)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            ShowWarning($"Не удалось открыть файл: {ex.Message}");
-        }
+        return dlg.ShowDialog(this) == DialogResult.OK ? dlg.FileName : null;
     }
 }

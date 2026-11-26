@@ -24,15 +24,6 @@ internal sealed class PdfOutput : IDisposable
         WriteAtomically(path, stream => output.Save(stream, closeStream: false));
     }
 
-    /// <summary>Собирает страницы в новый PDF и возвращает его байты (без записи на диск).</summary>
-    public byte[] WriteToBytes(IReadOnlyList<PageRef> pages)
-    {
-        using var output = Build(pages);
-        using var ms = new MemoryStream();
-        output.Save(ms, closeStream: false);
-        return ms.ToArray();
-    }
-
     private PdfDocument Build(IReadOnlyList<PageRef> pages)
     {
         if (pages.Count == 0)
@@ -81,8 +72,7 @@ internal sealed class PdfOutput : IDisposable
 
         try
         {
-            // ReadWrite — Open XML SDK (запись .docx) требует поток с чтением
-            using (var fs = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+            using (var fs = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 write(fs);
             }

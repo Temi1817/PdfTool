@@ -5,10 +5,17 @@ namespace PdfTools.Core;
 
 /// <summary>
 /// Word → PDF через установленный Microsoft Word (COM, позднее связывание через dynamic,
-/// без PIA). PDF → Word делается без Word — см. <see cref="PdfToDocxConverter"/>.
+/// без PIA). Если Word не установлен — IsWordInstalled() == false.
 /// </summary>
 public static class WordConverter
 {
+    /// <summary>Расширения файлов, которые открываются через Word.</summary>
+    public static readonly IReadOnlyList<string> WordExtensions = new[] { ".docx", ".doc", ".docm", ".rtf", ".odt" };
+
+    /// <summary>Это документ Word (по расширению)?</summary>
+    public static bool IsWordFile(string path) =>
+        WordExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
+
     private const int WdExportFormatPdf = 17;
     private const int WdDoNotSaveChanges = 0;
     private const int WdAlertsNone = 0;

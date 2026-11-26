@@ -103,9 +103,8 @@ internal sealed partial class MainForm : Form
 
     private async Task OpenWithDialogAsync()
     {
-        using var dlg = new OpenFileDialog { Filter = PdfFilter, Title = "Открыть PDF" };
-        if (dlg.ShowDialog(this) == DialogResult.OK)
-            await OpenFileAsync(dlg.FileName);
+        using var dlg = new OpenFileDialog { Filter = OpenFilter, Title = "Открыть PDF или документ Word" };
+        if (dlg.ShowDialog(this) == DialogResult.OK) await OpenAnyFileAsync(dlg.FileName);
     }
 
     private async Task OpenFileAsync(string path)
@@ -136,9 +135,9 @@ internal sealed partial class MainForm : Form
     private async Task AppendWithDialogAsync()
     {
         if (_model == null) return;
-        using var dlg = new OpenFileDialog { Filter = PdfFilter, Title = "Добавить PDF в конец", Multiselect = true };
+        using var dlg = new OpenFileDialog { Filter = OpenFilter, Title = "Добавить в конец", Multiselect = true };
         if (dlg.ShowDialog(this) == DialogResult.OK)
-            await AppendFilesAsync(dlg.FileNames);
+            await AppendFilesAsync(await PrepareFilesAsync(dlg.FileNames));
     }
 
     private async Task AppendFilesAsync(IEnumerable<string> paths)
@@ -169,6 +168,8 @@ internal sealed partial class MainForm : Form
     {
         if (_busy || files.Length == 0) return;
         Activate();
+        files = await PrepareFilesAsync(files); // документы Word сначала превращаем в PDF
+        if (files.Length == 0) return;
 
         if (_model == null)
         {
@@ -465,7 +466,7 @@ internal sealed partial class MainForm : Form
         _btnOpen.Enabled = !_busy;
         _btnAppend.Enabled = hasDoc;
         _btnClear.Enabled = hasDoc;
-        UpdateConvertButtons(hasDoc);
+        UpdateConvertButtons();
         _btnSave.Enabled = hasDoc;
         _miSaveAs.Enabled = hasDoc;
         _btnRotateLeft.Enabled = hasSelection;
