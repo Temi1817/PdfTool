@@ -4,7 +4,7 @@ namespace PdfTool;
 internal sealed partial class MainForm
 {
     private readonly ToolStrip _toolStrip = new();
-    private readonly ToolStripButton _btnOpen = new("Открыть");
+    private readonly ToolStripSplitButton _btnOpen = new("Открыть"); // ▾ — последние файлы
     private readonly ToolStripButton _btnAppend = new("Добавить PDF");
     private readonly ToolStripButton _btnClear = new("Очистить");
     private readonly ToolStripSplitButton _btnSave = new("Сохранить");
@@ -18,7 +18,13 @@ internal sealed partial class MainForm
     private readonly ToolStripMenuItem _miSplitRanges = new("По диапазонам (поле внизу)…");
     private readonly ToolStripButton _btnUndo = new("Отменить");
     private readonly ToolStripButton _btnSelectAll = new("Выделить всё");
-    private readonly ToolStripButton _btnWordToPdf = new("Word → PDF");
+    private readonly ToolStripDropDownButton _btnTools = new("Инструменты");
+    private readonly ToolStripMenuItem _miCompress = new("Сжать PDF…");
+    private readonly ToolStripMenuItem _miNumbers = new("Нумерация страниц…");
+    private readonly ToolStripMenuItem _miToJpg = new("Страницы → JPG…");
+    private readonly ToolStripMenuItem _miToPng = new("Страницы → PNG…");
+    private readonly ToolStripMenuItem _miImagesToPdf = new("Картинки → PDF…");
+    private readonly ToolStripMenuItem _btnWordToPdf = new("Word → PDF…");
 
     private readonly ThumbnailView _view = new();
     private readonly Label _emptyHint = new();
@@ -50,7 +56,13 @@ internal sealed partial class MainForm
         // ── Панель инструментов ──
         _toolStrip.GripStyle = ToolStripGripStyle.Hidden;
         _toolStrip.Padding = new Padding(4, 2, 4, 2);
-        _btnOpen.ToolTipText = "Открыть PDF (Ctrl+O)";
+        _btnOpen.ToolTipText = "Открыть PDF, документ Word или картинки (Ctrl+O)\n▾ — последние файлы";
+        _btnTools.DropDownItems.AddRange(new ToolStripItem[]
+        {
+            _miCompress, _miNumbers, new ToolStripSeparator(),
+            _miToJpg, _miToPng, new ToolStripSeparator(),
+            _miImagesToPdf, _btnWordToPdf
+        });
         _btnAppend.ToolTipText = "Добавить страницы другого PDF в конец документа";
         _btnClear.ToolTipText = "Закрыть текущий PDF, чтобы открыть другой (Ctrl+W)";
         _btnSave.ToolTipText = "Сохранить (Ctrl+S)";
@@ -73,7 +85,7 @@ internal sealed partial class MainForm
             new ToolStripSeparator(),
             _btnUndo, _btnSelectAll,
             new ToolStripSeparator(),
-            _btnWordToPdf
+            _btnTools
         });
 
         // ── Миниатюры ──
@@ -81,7 +93,7 @@ internal sealed partial class MainForm
         _emptyHint.Dock = DockStyle.Fill;
         _emptyHint.TextAlign = ContentAlignment.MiddleCenter;
         _emptyHint.ForeColor = SystemColors.GrayText;
-        _emptyHint.Text = "Перетащите сюда PDF или документ Word\nили нажмите «Открыть»";
+        _emptyHint.Text = "Перетащите сюда PDF, документ Word или фото\nили нажмите «Открыть»";
         _emptyHint.Font = new Font(Font.FontFamily, Font.Size * 1.4f);
         _emptyHint.AllowDrop = true;
         _view.Controls.Add(_emptyHint);

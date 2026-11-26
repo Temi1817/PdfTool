@@ -31,6 +31,9 @@ internal sealed class ThumbnailView : ListView
     /// <summary>Прогресс рендера: (готово, всего). При завершении готово == всего.</summary>
     public event Action<int, int>? RenderProgress;
 
+    /// <summary>Двойной клик (или Enter) по странице — открыть её крупно.</summary>
+    public event Action<int>? PageOpenRequested;
+
     public ThumbnailView()
     {
         View = View.LargeIcon;
@@ -241,6 +244,12 @@ internal sealed class ThumbnailView : ListView
         TextRenderer.DrawText(g, text, Font, rect, Color.Gray,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
         return bmp;
+    }
+
+    protected override void OnItemActivate(EventArgs e)
+    {
+        base.OnItemActivate(e);
+        if (FocusedItem != null) PageOpenRequested?.Invoke(FocusedItem.Index);
     }
 
     // ───────────── Перетаскивание ─────────────

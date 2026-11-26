@@ -21,10 +21,15 @@ internal sealed class PdfOutput : IDisposable
     public void Write(IReadOnlyList<PageRef> pages, string path)
     {
         using var output = Build(pages);
-        WriteAtomically(path, stream => output.Save(stream, closeStream: false));
+        SaveDocument(output, path);
     }
 
-    private PdfDocument Build(IReadOnlyList<PageRef> pages)
+    /// <summary>Безопасно сохраняет готовый документ на диск.</summary>
+    internal static void SaveDocument(PdfDocument doc, string path) =>
+        WriteAtomically(path, stream => doc.Save(stream, closeStream: false));
+
+    /// <summary>Собирает новый PDF из страниц. Вызывающий обязан сделать Dispose.</summary>
+    internal PdfDocument Build(IReadOnlyList<PageRef> pages)
     {
         if (pages.Count == 0)
             throw new PdfToolException(PdfErrorKind.InvalidInput, "Нет страниц для сохранения.");

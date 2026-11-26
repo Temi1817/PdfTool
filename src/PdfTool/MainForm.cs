@@ -24,7 +24,7 @@ internal sealed partial class MainForm : Form
 
     private void WireEvents()
     {
-        _btnOpen.Click += async (_, _) => await OpenWithDialogAsync();
+        _btnOpen.ButtonClick += async (_, _) => await OpenWithDialogAsync();
         _btnAppend.Click += async (_, _) => await AppendWithDialogAsync();
         SetupConvertButtons();
         _btnClear.Click += async (_, _) => await ClearDocumentAsync();
@@ -64,7 +64,7 @@ internal sealed partial class MainForm : Form
     {
         base.OnShown(e);
         if (!string.IsNullOrEmpty(_startupFile))
-            await OpenFileAsync(_startupFile);
+            await OpenAnyFileAsync(_startupFile); // PDF, Word или картинка
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -73,7 +73,7 @@ internal sealed partial class MainForm : Form
         var inText = ActiveControl is TextBoxBase;
         switch (keyData)
         {
-            case Keys.Control | Keys.O: _btnOpen.PerformClick(); return true;
+            case Keys.Control | Keys.O: if (_btnOpen.Enabled) _btnOpen.PerformButtonClick(); return true;
             case Keys.Control | Keys.W: if (_btnClear.Enabled) _btnClear.PerformClick(); return true;
             case Keys.Control | Keys.S: if (_btnSave.Enabled) _btnSave.PerformButtonClick(); return true;
             case Keys.Control | Keys.Shift | Keys.S: if (_miSaveAs.Enabled) _miSaveAs.PerformClick(); return true;
@@ -116,19 +116,8 @@ internal sealed partial class MainForm : Form
 
         _model = model;
         _sourceOverwriteConfirmed = false;
+        _recent.Add(model.FilePath);
         _view.SetDocument(model);
-        UpdateUiState();
-    }
-
-    /// <summary>Закрывает документ (файл на диске не трогается) и возвращает пустое окно.</summary>
-    private async Task ClearDocumentAsync()
-    {
-        if (_model == null || !await ConfirmDiscardChangesAsync()) return;
-        _model = null;
-        _sourceOverwriteConfirmed = false;
-        _txtRanges.Clear();
-        _lblRender.Text = "";
-        _view.SetDocument(null);
         UpdateUiState();
     }
 

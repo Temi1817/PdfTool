@@ -1,18 +1,22 @@
+using System.Runtime.InteropServices;
 using PdfTools.Core;
 
 namespace PdfTool;
 
 /// <summary>
-/// Документы Word: превращаются в PDF через установленный Microsoft Word
-/// и дальше открываются как обычные PDF (кнопкой, через «Открыть» или перетаскиванием).
+/// Файлы, которые не PDF: документы Word (через установленный Microsoft Word) и картинки
+/// превращаются в PDF и дальше открываются как обычные PDF — кнопкой, через «Открыть» или перетаскиванием.
 /// </summary>
 internal sealed partial class MainForm
 {
     private const string WordPattern = "*.docx;*.doc;*.docm;*.rtf;*.odt";
+    private const string ImagePattern = "*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.webp";
     private const string WordFilter = $"Документы Word ({WordPattern})|{WordPattern}|Все файлы (*.*)|*.*";
-    // Для «Открыть» и «Добавить PDF»: можно выбрать и PDF, и Word
+    private const string ImageFilter = $"Картинки ({ImagePattern})|{ImagePattern}|Все файлы (*.*)|*.*";
+    // Для «Открыть» и «Добавить»: PDF, Word и картинки
     private const string OpenFilter =
-        $"PDF и документы Word|*.pdf;{WordPattern}|PDF-файлы (*.pdf)|*.pdf|Документы Word|{WordPattern}|Все файлы (*.*)|*.*";
+        $"PDF, Word и картинки|*.pdf;{WordPattern};{ImagePattern}|PDF-файлы (*.pdf)|*.pdf|" +
+        $"Документы Word|{WordPattern}|Картинки|{ImagePattern}|Все файлы (*.*)|*.*";
 
     private readonly bool _wordInstalled = WordConverter.IsWordInstalled();
 
@@ -22,9 +26,17 @@ internal sealed partial class MainForm
         _btnWordToPdf.ToolTipText = _wordInstalled
             ? "Превратить документ Word в PDF и открыть его.\nМожно просто перетащить файл Word в окно."
             : "Нужен установленный Microsoft Word";
+        _miImagesToPdf.Click += async (_, _) => await ImagesToPdfWithDialogAsync();
+        _miImagesToPdf.ToolTipText = "Собрать фото или сканы в один PDF.\nМожно просто перетащить картинки в окно.";
+        SetupTools();
     }
 
-    private void UpdateConvertButtons() => _btnWordToPdf.Enabled = !_busy && _wordInstalled;
+    private void UpdateConvertButtons()
+    {
+        _btnWordToPdf.Enabled = !_busy && _wordInstalled;
+        _miImagesToPdf.Enabled = !_busy;
+        UpdateToolButtons();
+    }
 
     private async Task WordToPdfWithDialogAsync()
     {
@@ -32,7 +44,13 @@ internal sealed partial class MainForm
         if (dlg.ShowDialog(this) == DialogResult.OK) await OpenAnyFileAsync(dlg.FileName);
     }
 
-    /// <summary>Открывает PDF, а документ Word сначала превращает в PDF.</summary>
+    private async Task ImagesToPdfWithDialogAsync()
+    {
+        using var dlg = new OpenFileDialog { Filter = ImageFilter, Title = "Выберите картинки", Multiselect = true };
+        if (dlg.ShowDialog(this) == DialogResult.OK) await HandleDroppedFilesAsync(dlg.FileNames);
+    }
+
+    /// <summary>Открывает PDF; документ Word или картинку сначала превращает в PDF.</summary>
     private async Task OpenAnyFileAsync(string path)
     {
         var pdfs = await PrepareFilesAsync(new[] { path });
@@ -40,23 +58,50 @@ internal sealed partial class MainForm
     }
 
     /// <summary>
-    /// Документы Word превращает в PDF, остальные файлы возвращает как есть.
-    /// Файлы, которые не удалось сконвертировать, пропускаются (ошибка уже показана).
+    /// Документы Word и картинки превращает в PDF, остальные файлы возвращает как есть.
+    /// Все картинки собираются в один PDF (по имени, как в Проводнике) на месте первой из них.
+    /// Файлы, которые не удалось превратить, пропускаются (ошибка уже показана).
     /// </summary>
     private async Task<string[]> PrepareFilesAsync(IEnumerable<string> files)
     {
+        var list = files.ToList();
+        var images = list.Where(ImagePdfBuilder.IsImageFile).ToList();
+        images.Sort(StrCmpLogicalW);
+
         var result = new List<string>();
-        foreach (var file in files)
+        var imagesDone = false;
+        foreach (var file in list)
         {
-            if (!WordConverter.IsWordFile(file))
+            if (ImagePdfBuilder.IsImageFile(file))
+            {
+                if (imagesDone) continue;
+                imagesDone = true;
+                var pdf = await ConvertImagesToPdfAsync(images);
+                if (pdf != null) result.Add(pdf);
+            }
+            else if (WordConverter.IsWordFile(file))
+            {
+                var pdf = await ConvertWordToPdfAsync(file);
+                if (pdf != null) result.Add(pdf);
+            }
+            else
             {
                 result.Add(file);
-                continue;
             }
-            var pdf = await ConvertWordToPdfAsync(file);
-            if (pdf != null) result.Add(pdf);
         }
         return result.ToArray();
+    }
+
+    private async Task<string?> ConvertImagesToPdfAsync(IReadOnlyList<string> images)
+    {
+        var target = AskPdfPathFor(images[0]);
+        if (target == null) return null;
+
+        var ok = await RunBusyAsync($"Картинки → PDF ({images.Count} шт.)…",
+            () => { ImagePdfBuilder.Create(images, target); return true; });
+        if (!ok) return null;
+        _lblRender.Text = $"Создан PDF: {Path.GetFileName(target)}";
+        return target;
     }
 
     /// <summary>Конвертирует документ Word в PDF рядом с ним. Возвращает путь к PDF или null.</summary>
@@ -80,18 +125,18 @@ internal sealed partial class MainForm
     }
 
     /// <summary>
-    /// Куда сохранить PDF: рядом с документом, с тем же именем.
+    /// Куда сохранить PDF: рядом с исходным файлом, с тем же именем.
     /// Если такой файл уже есть — спрашиваем: перезаписать или выбрать другое имя.
     /// </summary>
-    private string? AskPdfPathFor(string wordPath)
+    private string? AskPdfPathFor(string sourcePath)
     {
-        var target = Path.ChangeExtension(Path.GetFullPath(wordPath), ".pdf");
+        var target = Path.ChangeExtension(Path.GetFullPath(sourcePath), ".pdf");
         if (!File.Exists(target)) return target;
 
         var answer = MessageBox.Show(this,
             $"Рядом уже есть файл «{Path.GetFileName(target)}».\n\n" +
             "Да — перезаписать его\nНет — сохранить под другим именем",
-            "Word → PDF", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+            "Создание PDF", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
         if (answer == DialogResult.Yes) return target;
         if (answer != DialogResult.No) return null;
 
@@ -105,4 +150,8 @@ internal sealed partial class MainForm
         };
         return dlg.ShowDialog(this) == DialogResult.OK ? dlg.FileName : null;
     }
+
+    // Сортировка имён как в Проводнике: «фото2» раньше «фото10»
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+    private static extern int StrCmpLogicalW(string x, string y);
 }

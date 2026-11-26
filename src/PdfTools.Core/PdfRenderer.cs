@@ -53,6 +53,24 @@ public static class PdfRenderer
         }
     }
 
+    /// <summary>Рендер страницы в JPEG или PNG с заданным DPI (для сохранения страниц картинками).</summary>
+    internal static byte[] RenderPageImage(PdfDocumentModel model, PageRef page, int dpi, bool jpeg)
+    {
+        var source = model.GetSource(page.SourceId);
+        SKBitmap bitmap;
+        lock (RenderLock)
+        {
+            bitmap = Conversion.ToImage(source.Data, page: page.PageIndex, options: new RenderOptions(
+                Dpi: dpi, WithAnnotations: true, Rotation: ToPdfRotation(page.Rotation),
+                BackgroundColor: SKColors.White));
+        }
+        using (bitmap)
+        using (var data = bitmap.Encode(jpeg ? SKEncodedImageFormat.Jpeg : SKEncodedImageFormat.Png, 90))
+        {
+            return data.ToArray();
+        }
+    }
+
     private static PdfRotation ToPdfRotation(int degrees) => (((degrees % 360) + 360) % 360) switch
     {
         90 => PdfRotation.Rotate90,
