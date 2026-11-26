@@ -9,7 +9,7 @@ namespace PdfTool;
 /// </summary>
 internal sealed class StampEditForm : Form
 {
-    private enum Tool { Rectangle, Ellipse, Eraser }
+    private enum Tool { Rectangle, Ellipse, Eraser, SmartEraser }
 
     private readonly Stack<byte[]> _history = new();
     private readonly byte[] _original;
@@ -19,6 +19,9 @@ internal sealed class StampEditForm : Form
     private readonly ToolStripButton _btnRect = new("▭ Рамка") { CheckOnClick = true, ToolTipText = "Обведите нужную часть — остальное удалится" };
     private readonly ToolStripButton _btnEllipse = new("◯ Круг") { CheckOnClick = true, ToolTipText = "Обведите круглую печать — всё вокруг удалится" };
     private readonly ToolStripButton _btnEraser = new("Ластик") { CheckOnClick = true, ToolTipText = "Сотрите лишнее, водя мышкой" };
+    private readonly ToolStripButton _btnSmartEraser = new("Умный ластик") { CheckOnClick = true, ToolTipText = "Стирает только чёрное и серое — цветная печать под ним остаётся" };
+    private readonly ToolStripButton _btnKeepColored = new("🎨 Только цветное") { ToolTipText = "Убрать весь чёрный и серый текст — останется цветная (синяя) печать.\nНе работает на чёрно-белых сканах." };
+    private readonly ToolStripComboBox _strictness = new() { DropDownStyle = ComboBoxStyle.DropDownList, AutoSize = false, Width = 90, ToolTipText = "Насколько цветным должен быть пиксель, чтобы остаться" };
     private readonly ToolStripComboBox _eraserSize = new() { DropDownStyle = ComboBoxStyle.DropDownList, AutoSize = false, Width = 110 };
     private readonly ToolStripButton _btnUndo = new("↶ Отменить шаг") { ToolTipText = "Ctrl+Z" };
     private readonly ToolStripButton _btnReset = new("Сначала");
@@ -44,11 +47,14 @@ internal sealed class StampEditForm : Form
 
         foreach (var (title, _) in EraserSizes) _eraserSize.Items.Add(title);
         _eraserSize.SelectedIndex = 1;
+        foreach (var (title, _) in Strictness) _strictness.Items.Add(title);
+        _strictness.SelectedIndex = 1;
 
         var bar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, Padding = new Padding(4, 2, 4, 2) };
         bar.Items.AddRange(new ToolStripItem[]
         {
-            _btnRect, _btnEllipse, _btnEraser, new ToolStripLabel("Размер ластика:"), _eraserSize,
+            _btnRect, _btnEllipse, _btnEraser, _btnSmartEraser, new ToolStripLabel("Размер ластика:"), _eraserSize,
+            new ToolStripSeparator(), _btnKeepColored, new ToolStripLabel("Строгость:"), _strictness,
             new ToolStripSeparator(), _btnUndo, _btnReset
         });
 
@@ -67,6 +73,8 @@ internal sealed class StampEditForm : Form
         _btnRect.Click += (_, _) => SelectTool(Tool.Rectangle);
         _btnEllipse.Click += (_, _) => SelectTool(Tool.Ellipse);
         _btnEraser.Click += (_, _) => SelectTool(Tool.Eraser);
+        _btnSmartEraser.Click += (_, _) => SelectTool(Tool.SmartEraser);
+        _btnKeepColored.Click += (_, _) => Apply(png => StampImage.KeepColored(png, ColorThreshold));
         _btnUndo.Click += (_, _) => UndoStep();
         _btnReset.Click += (_, _) => { _history.Clear(); SetCurrent(_original, remember: false); };
 
@@ -78,6 +86,11 @@ internal sealed class StampEditForm : Form
     public byte[] Result => _current;
 
     private Tool CurrentTool { get; set; }
+    private static readonly (string Title, int Threshold)[] Strictness = { ("Мягко", 18), ("Средне", StampImage.DefaultColorThreshold), ("Строго", 45) };
+
+    private int ColorThreshold => Strictness[Math.Max(0, _strictness.SelectedIndex)].Threshold;
+    private bool IsEraser => CurrentTool is Tool.Eraser or Tool.SmartEraser;
+
     private int EraserRadius => EraserSizes[Math.Max(0, _eraserSize.SelectedIndex)].Radius;
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -92,14 +105,16 @@ internal sealed class StampEditForm : Form
         _btnRect.Checked = tool == Tool.Rectangle;
         _btnEllipse.Checked = tool == Tool.Ellipse;
         _btnEraser.Checked = tool == Tool.Eraser;
-        _eraserSize.Enabled = tool == Tool.Eraser;
+        _btnSmartEraser.Checked = tool == Tool.SmartEraser;
+        _eraserSize.Enabled = IsEraser;
         _hint.Text = tool switch
         {
             Tool.Rectangle => "Обведите мышкой нужную часть — всё снаружи удалится.",
             Tool.Ellipse => "Обведите круглую печать — всё вокруг круга удалится.",
+            Tool.SmartEraser => "Водите по чёрному тексту — сотрётся только чёрное и серое, цветная печать останется.",
             _ => "Водите мышкой с нажатой кнопкой по лишнему — оно сотрётся."
         };
-        _canvas.Cursor = tool == Tool.Eraser ? Cursors.Hand : Cursors.Cross;
+        _canvas.Cursor = IsEraser ? Cursors.Hand : Cursors.Cross;
     }
 
     private void UndoStep()
@@ -204,7 +219,7 @@ internal sealed class StampEditForm : Form
             g.InterpolationMode = InterpolationMode.HighQualityBicubic;
             g.DrawImage(_image, area);
 
-            if (_dragStart is { } start && _owner.CurrentTool != Tool.Eraser)
+            if (_dragStart is { } start && !_owner.IsEraser)
             {
                 var sel = Selection(start, _dragNow);
                 using var dim = new Region(area);
@@ -237,7 +252,7 @@ internal sealed class StampEditForm : Form
             base.OnMouseDown(e);
             if (_image == null || e.Button != MouseButtons.Left) return;
             Capture = true;
-            if (_owner.CurrentTool == Tool.Eraser) _stroke.Add(e.Location);
+            if (_owner.IsEraser) _stroke.Add(e.Location);
             else
             {
                 _dragStart = e.Location;
@@ -249,7 +264,7 @@ internal sealed class StampEditForm : Form
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
-            if (_owner.CurrentTool == Tool.Eraser && _stroke.Count > 0) _stroke.Add(e.Location);
+            if (_owner.IsEraser && _stroke.Count > 0) _stroke.Add(e.Location);
             else if (_dragStart != null) _dragNow = e.Location;
             else return;
             Invalidate();
@@ -266,7 +281,9 @@ internal sealed class StampEditForm : Form
                 var points = _stroke.Select(ToImage).ToList();
                 var radius = _owner.EraserRadius / ViewScale;
                 _stroke.Clear();
-                _owner.Apply(png => StampImage.Erase(png, points, radius));
+                var smart = _owner.CurrentTool == Tool.SmartEraser;
+                var threshold = _owner.ColorThreshold;
+                _owner.Apply(png => StampImage.Erase(png, points, radius, smart, threshold));
             }
             else if (_dragStart is { } start)
             {

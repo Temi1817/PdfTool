@@ -166,6 +166,68 @@ public class StampTests : IDisposable
         Assert.True(w < before.W - 100, $"ширина {w}: «текст» стёрт, осталась печать");
     }
 
+    /// <summary>Синее кольцо печати, через которое проходит чёрная строка текста (прозрачный фон).</summary>
+    private static byte[] BlueSealWithBlackText()
+    {
+        using var bmp = new SKBitmap(new SKImageInfo(300, 300, SKColorType.Rgba8888, SKAlphaType.Unpremul));
+        using (var canvas = new SKCanvas(bmp))
+        {
+            canvas.Clear(SKColors.Transparent);
+            using var ring = new SKPaint { Color = new SKColor(40, 60, 190), Style = SKPaintStyle.Stroke, StrokeWidth = 12 };
+            canvas.DrawCircle(150, 150, 110, ring);
+            using var text = new SKPaint { Color = new SKColor(25, 25, 25) };
+            canvas.DrawRect(10, 140, 280, 20, text);   // «ТОО …» поперёк печати
+        }
+        using var data = bmp.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
+    }
+
+    [Fact]
+    public void KeepColored_removes_black_text_and_keeps_blue_seal()
+    {
+        var result = StampImage.KeepColored(BlueSealWithBlackText());
+
+        using var bmp = SKBitmap.Decode(result);
+        // Картинка обрезана по кольцу: внешний диаметр 232 + небольшой отступ; концы текста за кольцом ушли
+        Assert.InRange(bmp.Width, 232, 245);
+        var center = bmp.GetPixel(bmp.Width / 2, bmp.Height / 2);
+        Assert.Equal(0, center.Alpha);
+        // Верх кольца — синий и непрозрачный
+        var top = bmp.GetPixel(bmp.Width / 2, bmp.Height / 2 - 110);
+        Assert.Equal(255, top.Alpha);
+        Assert.True(IsBlue(top));
+    }
+
+    [Fact]
+    public void KeepColored_on_black_and_white_scan_gives_clear_error()
+    {
+        using var bmp = new SKBitmap(new SKImageInfo(100, 100, SKColorType.Rgba8888, SKAlphaType.Unpremul));
+        bmp.Erase(new SKColor(90, 90, 92));   // серый «скан»
+        using var data = bmp.Encode(SKEncodedImageFormat.Png, 100);
+
+        var ex = Assert.Throws<PdfToolException>(() => StampImage.KeepColored(data.ToArray()));
+        Assert.Contains("Цветной печати не найдено", ex.Message);
+    }
+
+    [Fact]
+    public void Smart_eraser_removes_only_black()
+    {
+        var png = BlueSealWithBlackText();
+
+        // Ведём ластиком по строке текста через всю картинку — в том числе по кольцу
+        var erased = StampImage.Erase(png, new[] { (0f, 150f), (300f, 150f) }, radius: 15, onlyNeutral: true);
+
+        using var bmp = SKBitmap.Decode(erased);
+        Assert.InRange(bmp.Width, 232, 245);            // осталось ровно кольцо, концы текста стёрты
+        var mid = bmp.Height / 2;
+        Assert.Equal(0, bmp.GetPixel(bmp.Width / 2, mid).Alpha);   // текст в центре стёрт
+        // Ластик (радиус 15) захватывает и полосу над текстом (текст — 20 px высотой).
+        // Синее кольцо там, под ластиком, должно остаться. Там, где чёрное лежало ПОВЕРХ кольца, — пробел (неизбежно).
+        var row = mid - 13;
+        Assert.Contains(Enumerable.Range(0, 20), x => IsBlue(bmp.GetPixel(x, row)) && bmp.GetPixel(x, row).Alpha > 200);
+        Assert.Contains(Enumerable.Range(bmp.Width - 20, 20), x => IsBlue(bmp.GetPixel(x, row)) && bmp.GetPixel(x, row).Alpha > 200);
+    }
+
     [Theory]
     [InlineData(10, 10, 2, 2)]       // слишком маленькое выделение
     [InlineData(0, 0, 100, 100)]     // пустой угол — ничего не останется

@@ -71,8 +71,41 @@ public static class StampImage
         return Finish(bmp);
     }
 
+    /// <summary>Порог «цветности» по умолчанию: насколько синий/красный должен отличаться от серого.</summary>
+    public const int DefaultColorThreshold = 30;
+
+    /// <summary>
+    /// Цветность пикселя: разница между самым ярким и самым тусклым каналом.
+    /// У чёрного, серого и белого она около нуля, у синей ручки или печати — большая.
+    /// </summary>
+    internal static int Chroma(SKColor c) =>
+        Math.Max(c.Red, Math.Max(c.Green, c.Blue)) - Math.Min(c.Red, Math.Min(c.Green, c.Blue));
+
+    /// <summary>
+    /// Оставляет только цветное (синюю/фиолетовую/красную печать), убирая чёрный и серый текст документа.
+    /// Чем больше <paramref name="threshold"/>, тем строже: уходит и сероватое.
+    /// </summary>
+    public static byte[] KeepColored(byte[] png, int threshold = DefaultColorThreshold)
+    {
+        using var bmp = DecodeRgba(png);
+        var pixels = bmp.Pixels;
+        for (var i = 0; i < pixels.Length; i++)
+        {
+            var c = pixels[i];
+            if (c.Alpha == 0) continue;
+            // Плавный переход на границе — края печати не становятся «рваными»
+            var opacity = Math.Clamp((Chroma(c) - (threshold - 8)) / 16.0, 0, 1);
+            pixels[i] = c.WithAlpha((byte)Math.Round(c.Alpha * opacity));
+        }
+        bmp.Pixels = pixels;
+        return Finish(bmp, "Цветной печати не найдено: она чёрная или серая, либо фото слишком тёмное.\n" +
+                           "Попробуйте строгость «Мягко» или ластик.");
+    }
+
     /// <summary>Стирает след ластика: линия по точкам (в пикселях картинки) толщиной 2×radius.</summary>
-    public static byte[] Erase(byte[] png, IReadOnlyList<(float X, float Y)> stroke, float radius)
+    /// <param name="onlyNeutral">«Умный ластик»: стирает только чёрное/серое, цветная печать под ним остаётся.</param>
+    public static byte[] Erase(byte[] png, IReadOnlyList<(float X, float Y)> stroke, float radius,
+        bool onlyNeutral = false, int threshold = DefaultColorThreshold)
     {
         ArgumentNullException.ThrowIfNull(stroke);
         using var bmp = DecodeRgba(png);
@@ -86,7 +119,10 @@ public static class StampImage
             for (var px = Math.Max(0, (int)(cx - radius)); px <= Math.Min(bmp.Width - 1, (int)(cx + radius)); px++)
             {
                 float dx = px + 0.5f - cx, dy = py + 0.5f - cy;
-                if (dx * dx + dy * dy <= r2) pixels[py * bmp.Width + px] = SKColors.Transparent;
+                if (dx * dx + dy * dy > r2) continue;
+                var i = py * bmp.Width + px;
+                if (onlyNeutral && Chroma(pixels[i]) >= threshold) continue;
+                pixels[i] = SKColors.Transparent;
             }
         }
 
@@ -112,10 +148,10 @@ public static class StampImage
         return ToRgba(decoded, int.MaxValue);
     }
 
-    private static byte[] Finish(SKBitmap bmp)
+    private static byte[] Finish(SKBitmap bmp,
+        string emptyMessage = "После этого от картинки ничего не останется. Выделите другую область.")
     {
-        using var trimmed = Trim(bmp) ?? throw new PdfToolException(PdfErrorKind.InvalidInput,
-            "После этого от картинки ничего не останется. Выделите другую область.");
+        using var trimmed = Trim(bmp) ?? throw new PdfToolException(PdfErrorKind.InvalidInput, emptyMessage);
         using var data = trimmed.Encode(SKEncodedImageFormat.Png, 100);
         return data.ToArray();
     }
