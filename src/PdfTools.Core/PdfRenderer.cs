@@ -53,6 +53,22 @@ public static class PdfRenderer
         }
     }
 
+    /// <summary>Рендер целой страницы в PNG с заданным DPI (для вставки сканов в Word).</summary>
+    internal static byte[] RenderPagePng(byte[] pdfBytes, int pageIndex, int dpi)
+    {
+        SKBitmap bitmap;
+        lock (RenderLock)
+        {
+            bitmap = Conversion.ToImage(pdfBytes, page: pageIndex,
+                options: new RenderOptions(Dpi: dpi, WithAnnotations: true, BackgroundColor: SKColors.White));
+        }
+        using (bitmap)
+        using (var data = bitmap.Encode(SKEncodedImageFormat.Png, 100))
+        {
+            return data.ToArray();
+        }
+    }
+
     private static PdfRotation ToPdfRotation(int degrees) => (((degrees % 360) + 360) % 360) switch
     {
         90 => PdfRotation.Rotate90,

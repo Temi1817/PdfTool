@@ -20,12 +20,26 @@ internal sealed class PdfOutput : IDisposable
     /// <summary>Собирает страницы в новый PDF и записывает его в <paramref name="path"/>.</summary>
     public void Write(IReadOnlyList<PageRef> pages, string path)
     {
+        using var output = Build(pages);
+        WriteAtomically(path, stream => output.Save(stream, closeStream: false));
+    }
+
+    /// <summary>Собирает страницы в новый PDF и возвращает его байты (без записи на диск).</summary>
+    public byte[] WriteToBytes(IReadOnlyList<PageRef> pages)
+    {
+        using var output = Build(pages);
+        using var ms = new MemoryStream();
+        output.Save(ms, closeStream: false);
+        return ms.ToArray();
+    }
+
+    private PdfDocument Build(IReadOnlyList<PageRef> pages)
+    {
         if (pages.Count == 0)
             throw new PdfToolException(PdfErrorKind.InvalidInput, "Нет страниц для сохранения.");
 
-        using var output = new PdfDocument();
+        var output = new PdfDocument();
         output.Info.Creator = "PdfTool";
-
         foreach (var pageRef in pages)
         {
             var source = GetOpened(pageRef.SourceId);
@@ -33,8 +47,7 @@ internal sealed class PdfOutput : IDisposable
             if (pageRef.Rotation != 0)
                 page.Rotate = NormalizeRotation(page.Rotate + pageRef.Rotation);
         }
-
-        SaveAtomically(output, path);
+        return output;
     }
 
     public void Dispose()
@@ -60,7 +73,7 @@ internal sealed class PdfOutput : IDisposable
     /// Пишет во временный файл рядом, потом заменяет целевой.
     /// Если что-то пошло не так — целевой файл остаётся нетронутым.
     /// </summary>
-    private static void SaveAtomically(PdfDocument doc, string path)
+    internal static void WriteAtomically(string path, Action<Stream> write)
     {
         var fullPath = Path.GetFullPath(path);
         var dir = Path.GetDirectoryName(fullPath)!;
@@ -68,9 +81,10 @@ internal sealed class PdfOutput : IDisposable
 
         try
         {
-            using (var fs = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            // ReadWrite — Open XML SDK (запись .docx) требует поток с чтением
+            using (var fs = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
             {
-                doc.Save(fs, closeStream: false);
+                write(fs);
             }
             File.Move(tempPath, fullPath, overwrite: true);
         }

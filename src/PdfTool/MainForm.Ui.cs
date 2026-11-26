@@ -18,6 +18,8 @@ internal sealed partial class MainForm
     private readonly ToolStripMenuItem _miSplitRanges = new("По диапазонам (поле внизу)…");
     private readonly ToolStripButton _btnUndo = new("Отменить");
     private readonly ToolStripButton _btnSelectAll = new("Выделить всё");
+    private readonly ToolStripButton _btnPdfToWord = new("PDF → Word");
+    private readonly ToolStripButton _btnWordToPdf = new("Word → PDF");
 
     private readonly ThumbnailView _view = new();
     private readonly Label _emptyHint = new();
@@ -70,8 +72,9 @@ internal sealed partial class MainForm
             new ToolStripSeparator(),
             _btnSplit,
             new ToolStripSeparator(),
-            _btnUndo, _btnSelectAll
-            // Версия 2: здесь появится группа «Конвертация» (Word → PDF, PDF → Word)
+            _btnUndo, _btnSelectAll,
+            new ToolStripSeparator(),
+            _btnPdfToWord, _btnWordToPdf
         });
 
         // ── Миниатюры ──

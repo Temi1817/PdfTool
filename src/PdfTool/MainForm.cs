@@ -26,6 +26,7 @@ internal sealed partial class MainForm : Form
     {
         _btnOpen.Click += async (_, _) => await OpenWithDialogAsync();
         _btnAppend.Click += async (_, _) => await AppendWithDialogAsync();
+        SetupConvertButtons();
         _btnClear.Click += async (_, _) => await ClearDocumentAsync();
         _btnSave.ButtonClick += async (_, _) => await SaveAsync();
         _miSaveAs.Click += async (_, _) => await SaveAsAsync();
@@ -146,11 +147,8 @@ internal sealed partial class MainForm : Form
         if (model == null) return;
 
         var firstNew = model.PageCount;
-        foreach (var path in paths)
-        {
-            // Ошибка в одном файле не мешает добавить остальные
+        foreach (var path in paths) // ошибка в одном файле не мешает добавить остальные
             await RunBusyAsync($"Добавление «{Path.GetFileName(path)}»…", () => PdfMerger.Append(model, path));
-        }
         if (model.PageCount > firstNew)
             _view.RefreshPages(Enumerable.Range(firstNew, model.PageCount - firstNew));
         UpdateUiState();
@@ -467,6 +465,7 @@ internal sealed partial class MainForm : Form
         _btnOpen.Enabled = !_busy;
         _btnAppend.Enabled = hasDoc;
         _btnClear.Enabled = hasDoc;
+        UpdateConvertButtons(hasDoc);
         _btnSave.Enabled = hasDoc;
         _miSaveAs.Enabled = hasDoc;
         _btnRotateLeft.Enabled = hasSelection;

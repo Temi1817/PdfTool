@@ -9,7 +9,9 @@ public enum PdfErrorKind
     FileLocked,
     Corrupted,
     PasswordProtected,
-    IoError
+    IoError,
+    WordUnavailable,
+    ConversionFailed
 }
 
 /// <summary>
