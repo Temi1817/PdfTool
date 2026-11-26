@@ -191,6 +191,44 @@ public class NewToolsTests : IDisposable
     }
 
     [Fact]
+    public void Number_is_drawn_in_chosen_color()
+    {
+        var model = PdfDocumentModel.Open(TestPdf.Create(_tmp.Path, "c.pdf", 595));
+        var outPath = Path.Combine(_tmp.Path, "red.pdf");
+
+        PdfPageNumberer.AddNumbers(model, outPath,
+            new PageNumberOptions(Format: "Стр. {n}", FontSize: 60, Color: "#E00000"));
+
+        var numbered = PdfDocumentModel.Open(outPath);
+        using var bmp = SKBitmap.Decode(PdfRenderer.RenderThumbnailPng(numbered, numbered.Pages[0], 400, 400));
+        int red = 0, black = 0;
+        for (var y = bmp.Height / 2; y < bmp.Height - 4; y++)   // нижняя половина, без рамки миниатюры
+        for (var x = 4; x < bmp.Width - 4; x++)
+        {
+            var c = bmp.GetPixel(x, y);
+            if (c.Alpha < 200) continue;
+            if (c.Red > 180 && c.Green < 80 && c.Blue < 80) red++;
+            if (c.Red < 60 && c.Green < 60 && c.Blue < 60) black++;
+        }
+        Assert.True(red > 50, $"красных пикселей: {red}");
+        Assert.Equal(0, black);
+    }
+
+    [Theory]
+    [InlineData("красный")]
+    [InlineData("#12345")]
+    [InlineData("#GGGGGG")]
+    public void Wrong_color_is_rejected(string color)
+    {
+        var model = PdfDocumentModel.Open(TestPdf.CreateNumbered(_tmp.Path, "w.pdf", 1));
+        var outPath = Path.Combine(_tmp.Path, "w_out.pdf");
+
+        Assert.Throws<PdfToolException>(() =>
+            PdfPageNumberer.AddNumbers(model, outPath, new PageNumberOptions(Color: color)));
+        Assert.False(File.Exists(outPath));
+    }
+
+    [Fact]
     public void Number_format_and_start_are_validated()
     {
         var model = PdfDocumentModel.Open(TestPdf.CreateNumbered(_tmp.Path, "v.pdf", 2));

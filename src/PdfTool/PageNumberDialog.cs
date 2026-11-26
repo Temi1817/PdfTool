@@ -20,8 +20,11 @@ internal sealed class PageNumberDialog : Form
     private readonly ComboBox _format = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
     private readonly NumericUpDown _start = new() { Minimum = 0, Maximum = 100_000, Value = 1, Width = 90 };
     private readonly NumericUpDown _size = new() { Minimum = 6, Maximum = 36, Value = 11, Width = 90 };
-    private readonly Label _preview = new() { AutoSize = true, ForeColor = SystemColors.GrayText };
+    private readonly Label _preview = new() { AutoSize = true };
+    private readonly Panel _swatch = new() { Size = new Size(24, 24), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.Black };
+    private readonly Button _colorButton = new() { Text = "Цвет…", AutoSize = true };
     private readonly int _pageCount;
+    private Color _color = Color.Black;
 
     public PageNumberDialog(int pageCount)
     {
@@ -53,6 +56,10 @@ internal sealed class PageNumberDialog : Form
         AddRow(table, "Вид:", _format);
         AddRow(table, "Начать с:", _start);
         AddRow(table, "Размер шрифта:", _size);
+        var colorRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        _swatch.Margin = new Padding(0, 2, 8, 0);
+        colorRow.Controls.AddRange(new Control[] { _swatch, _colorButton });
+        AddRow(table, "Цвет:", colorRow);
         AddRow(table, "Пример:", _preview);
         table.Controls.Add(buttons, 0, table.RowCount);
         table.SetColumnSpan(buttons, 2);
@@ -60,6 +67,9 @@ internal sealed class PageNumberDialog : Form
 
         _format.SelectedIndexChanged += (_, _) => UpdatePreview();
         _start.ValueChanged += (_, _) => UpdatePreview();
+        _colorButton.Click += (_, _) => PickColor();
+        _swatch.Click += (_, _) => PickColor();
+        _swatch.Cursor = Cursors.Hand;
         UpdatePreview();
     }
 
@@ -67,7 +77,17 @@ internal sealed class PageNumberDialog : Form
         Positions[_position.SelectedIndex].Value,
         Formats[_format.SelectedIndex],
         (int)_start.Value,
-        (double)_size.Value);
+        (double)_size.Value,
+        $"#{_color.R:X2}{_color.G:X2}{_color.B:X2}");
+
+    private void PickColor()
+    {
+        using var dlg = new ColorDialog { Color = _color, FullOpen = true, AnyColor = true };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        _color = dlg.Color;
+        _swatch.BackColor = _color;
+        _preview.ForeColor = _color;
+    }
 
     private static void AddRow(TableLayoutPanel table, string caption, Control control)
     {
