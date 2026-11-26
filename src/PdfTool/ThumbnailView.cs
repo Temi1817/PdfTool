@@ -145,7 +145,7 @@ internal sealed class ThumbnailView : ListView
 
     // ───────────── Фоновый рендер ─────────────
 
-    private static string KeyOf(PageRef p) => $"{p.SourceId}:{p.PageIndex}:{p.Rotation}";
+    private static string KeyOf(PageRef p) => p.RenderKey; // учитывает поворот и подписи
 
     private string ImageKeyFor(string key) =>
         _images.Images.ContainsKey(key) ? key : _failed.Contains(key) ? ErrorKey : LoadingKey;

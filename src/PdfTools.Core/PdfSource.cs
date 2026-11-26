@@ -17,13 +17,20 @@ public sealed class PdfSource
     /// <summary>Содержимое файла. Используется и для сборки PDF, и для рендера миниатюр.</summary>
     internal byte[] Data { get; }
 
-    private PdfSource(int id, string filePath, byte[] data, int pageCount)
+    // Собственный поворот страниц в файле (/Rotate) — нужен, чтобы знать, как страница видна
+    private readonly int[] _rotations;
+
+    private PdfSource(int id, string filePath, byte[] data, int[] rotations)
     {
         Id = id;
         FilePath = filePath;
         Data = data;
-        PageCount = pageCount;
+        PageCount = rotations.Length;
+        _rotations = rotations;
     }
+
+    /// <summary>Поворот страницы, записанный в самом файле (0/90/180/270).</summary>
+    public int GetPageRotation(int pageIndex) => _rotations[pageIndex];
 
     internal static PdfSource Load(int id, string path)
     {
@@ -50,7 +57,8 @@ public sealed class PdfSource
             throw new PdfToolException(PdfErrorKind.Corrupted,
                 $"В файле «{Path.GetFileName(path)}» нет ни одной страницы.");
 
-        return new PdfSource(id, Path.GetFullPath(path), data, doc.PageCount);
+        var rotations = doc.Pages.Cast<PdfPage>().Select(p => PdfOutput.NormalizeRotation(p.Rotate)).ToArray();
+        return new PdfSource(id, Path.GetFullPath(path), data, rotations);
     }
 
     /// <summary>Открывает копию документа для импорта страниц. Вызывающий обязан сделать Dispose.</summary>

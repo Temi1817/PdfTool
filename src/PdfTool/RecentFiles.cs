@@ -1,19 +1,20 @@
 namespace PdfTool;
 
 /// <summary>
-/// Список последних открытых файлов (до 10) в %AppData%\PdfTool\recent.txt.
-/// Любые ошибки чтения/записи молча игнорируются — список не критичен.
+/// Список последних файлов в %AppData%\PdfTool\ (recent.txt — открытые документы,
+/// stamps.txt — картинки подписей). Ошибки чтения/записи молча игнорируются — список не критичен.
 /// </summary>
 internal sealed class RecentFiles
 {
-    private const int MaxCount = 10;
+    private readonly int _maxCount;
     private readonly string _storePath;
     private readonly List<string> _items = new();
 
-    public RecentFiles()
+    public RecentFiles(string fileName = "recent.txt", int maxCount = 10)
     {
+        _maxCount = maxCount;
         _storePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PdfTool", "recent.txt");
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PdfTool", fileName);
         Load();
     }
 
@@ -24,7 +25,7 @@ internal sealed class RecentFiles
         var full = Path.GetFullPath(path);
         _items.RemoveAll(p => string.Equals(p, full, StringComparison.OrdinalIgnoreCase));
         _items.Insert(0, full);
-        if (_items.Count > MaxCount) _items.RemoveRange(MaxCount, _items.Count - MaxCount);
+        if (_items.Count > _maxCount) _items.RemoveRange(_maxCount, _items.Count - _maxCount);
         Save();
     }
 
@@ -49,7 +50,7 @@ internal sealed class RecentFiles
                 .Select(l => l.Trim())
                 .Where(l => l.Length > 0 && Path.IsPathFullyQualified(l))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(MaxCount));
+                .Take(_maxCount));
         }
         catch
         {

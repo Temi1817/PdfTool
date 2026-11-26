@@ -24,7 +24,7 @@ public static class PdfCompressor
     public static CompressionResult Compress(PdfDocumentModel model, string outputPath)
     {
         ArgumentNullException.ThrowIfNull(model);
-        using var output = new PdfOutput(model.GetSource);
+        using var output = new PdfOutput(model);
 
         long original;
         using (var plain = output.Build(model.Pages))

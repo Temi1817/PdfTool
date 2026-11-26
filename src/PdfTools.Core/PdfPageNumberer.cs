@@ -42,7 +42,7 @@ public static class PdfPageNumberer
         var brush = new XSolidBrush(ParseColor(options.Color));
 
         EnsureFonts();
-        using var output = new PdfOutput(model.GetSource);
+        using var output = new PdfOutput(model);
         using var doc = output.Build(model.Pages);
         var font = new XFont("Arial", options.FontSize);
         var total = doc.PageCount + options.StartFrom - 1;

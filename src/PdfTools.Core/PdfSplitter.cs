@@ -37,7 +37,7 @@ public static class PdfSplitter
 
         EnsureDirectory(outputDir);
         var created = new List<string>();
-        using var output = new PdfOutput(model.GetSource);
+        using var output = new PdfOutput(model);
         foreach (var range in ranges)
         {
             var path = Path.Combine(outputDir, $"{baseName}_{range}.pdf");
@@ -61,7 +61,7 @@ public static class PdfSplitter
     public static void ExtractPages(PdfDocumentModel model, IEnumerable<int> indices, string outputPath)
     {
         var pages = model.NormalizeIndices(indices).Select(i => model.Pages[i]).ToList();
-        using var output = new PdfOutput(model.GetSource);
+        using var output = new PdfOutput(model);
         output.Write(pages, outputPath);
     }
 

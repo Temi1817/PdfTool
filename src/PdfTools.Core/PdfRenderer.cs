@@ -43,6 +43,7 @@ public static class PdfRenderer
             }
             using (rendered)
             {
+                DrawStamps(model, page, rendered);
                 return FitIntoBox(rendered, width, height);
             }
         }
@@ -53,8 +54,11 @@ public static class PdfRenderer
         }
     }
 
-    /// <summary>Рендер страницы в JPEG или PNG с заданным DPI (для сохранения страниц картинками).</summary>
-    internal static byte[] RenderPageImage(PdfDocumentModel model, PageRef page, int dpi, bool jpeg)
+    /// <summary>
+    /// Рендер страницы целиком (без полей) в JPEG или PNG с заданным DPI, вместе с подписями.
+    /// Для сохранения страниц картинками и для окна установки подписи.
+    /// </summary>
+    public static byte[] RenderPageImage(PdfDocumentModel model, PageRef page, int dpi, bool jpeg)
     {
         var source = model.GetSource(page.SourceId);
         SKBitmap bitmap;
@@ -65,9 +69,37 @@ public static class PdfRenderer
                 BackgroundColor: SKColors.White));
         }
         using (bitmap)
-        using (var data = bitmap.Encode(jpeg ? SKEncodedImageFormat.Jpeg : SKEncodedImageFormat.Png, 90))
         {
+            DrawStamps(model, page, bitmap);
+            using var data = bitmap.Encode(jpeg ? SKEncodedImageFormat.Jpeg : SKEncodedImageFormat.Png, 90);
             return data.ToArray();
+        }
+    }
+
+    /// <summary>Накладывает подписи на уже отрисованную (видимую, повёрнутую) страницу.</summary>
+    private static void DrawStamps(PdfDocumentModel model, PageRef page, SKBitmap bitmap)
+    {
+        if (page.Stamps.Count == 0) return;
+        var rotation = model.VisibleRotation(page);
+        using var canvas = new SKCanvas(bitmap);
+        foreach (var stamp in page.Stamps)
+        {
+            using var image = SKImage.FromEncodedData(model.GetStampImage(stamp.ImageId));
+            if (image == null) continue;
+
+            var r = StampGeometry.ToVisible(stamp.Rect, rotation);
+            var angle = PdfOutput.NormalizeRotation(stamp.Rotation + rotation); // как картинка видна
+            var (x, y, w, h) = StampGeometry.Fit(r.X * bitmap.Width, r.Y * bitmap.Height,
+                r.Width * bitmap.Width, r.Height * bitmap.Height, image.Width, image.Height, angle);
+
+            var sideways = angle is 90 or 270;
+            var (drawW, drawH) = sideways ? (h, w) : (w, h);
+            canvas.Save();
+            canvas.Translate((float)(x + w / 2), (float)(y + h / 2));
+            if (angle != 0) canvas.RotateDegrees(angle);
+            canvas.DrawImage(image, SKRect.Create((float)(-drawW / 2), (float)(-drawH / 2), (float)drawW, (float)drawH),
+                new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+            canvas.Restore();
         }
     }
 

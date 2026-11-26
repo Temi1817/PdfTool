@@ -19,6 +19,7 @@ internal sealed partial class MainForm
     private readonly ToolStripButton _btnUndo = new("Отменить");
     private readonly ToolStripButton _btnSelectAll = new("Выделить всё");
     private readonly ToolStripDropDownButton _btnTools = new("Инструменты");
+    private readonly ToolStripMenuItem _miStamp = new("Подпись / печать");
     private readonly ToolStripMenuItem _miCompress = new("Сжать PDF…");
     private readonly ToolStripMenuItem _miNumbers = new("Нумерация страниц…");
     private readonly ToolStripMenuItem _miToJpg = new("Страницы → JPG…");
@@ -59,6 +60,7 @@ internal sealed partial class MainForm
         _btnOpen.ToolTipText = "Открыть PDF, документ Word или картинки (Ctrl+O)\n▾ — последние файлы";
         _btnTools.DropDownItems.AddRange(new ToolStripItem[]
         {
+            _miStamp, new ToolStripSeparator(),
             _miCompress, _miNumbers, new ToolStripSeparator(),
             _miToJpg, _miToPng, new ToolStripSeparator(),
             _miImagesToPdf, _btnWordToPdf

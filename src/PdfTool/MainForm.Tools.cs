@@ -6,9 +6,12 @@ namespace PdfTool;
 internal sealed partial class MainForm
 {
     private readonly RecentFiles _recent = new();
+    private readonly RecentFiles _recentStamps = new("stamps.txt", 5);
 
     private void SetupTools()
     {
+        _miStamp.DropDownItems.Add(new ToolStripMenuItem("Выбрать картинку…")); // чтобы было подменю
+        _miStamp.DropDownOpening += (_, _) => RebuildStampMenu();
         _miCompress.Click += async (_, _) => await CompressAsync();
         _miNumbers.Click += async (_, _) => await AddPageNumbersAsync();
         _miToJpg.Click += async (_, _) => await ExportPagesAsync(PageImageFormat.Jpeg);
@@ -27,6 +30,7 @@ internal sealed partial class MainForm
     {
         var hasDoc = _model != null && !_busy;
         _btnTools.Enabled = !_busy;
+        _miStamp.Enabled = hasDoc;
         _miCompress.Enabled = hasDoc;
         _miNumbers.Enabled = hasDoc;
         _miToJpg.Enabled = hasDoc;
@@ -87,6 +91,83 @@ internal sealed partial class MainForm
             return;
         }
         await OpenAnyFileAsync(path);
+    }
+
+    // ───────────── Подпись / печать ─────────────
+
+    private void RebuildStampMenu()
+    {
+        _miStamp.DropDownItems.Clear();
+        var pick = new ToolStripMenuItem("Выбрать картинку…") { ToolTipText = "Фото или скан подписи/печати (JPG, PNG)" };
+        pick.Click += (_, _) => AddStamp(null);
+        _miStamp.DropDownItems.Add(pick);
+
+        if (_recentStamps.Items.Count > 0)
+        {
+            _miStamp.DropDownItems.Add(new ToolStripSeparator());
+            foreach (var path in _recentStamps.Items)
+            {
+                var item = new ToolStripMenuItem(Path.GetFileName(path)) { ToolTipText = path };
+                item.Click += (_, _) => AddStamp(path);
+                _miStamp.DropDownItems.Add(item);
+            }
+        }
+
+        _miStamp.DropDownItems.Add(new ToolStripSeparator());
+        var remove = new ToolStripMenuItem("Убрать подписи с выбранных страниц");
+        remove.Click += (_, _) => RemoveStamps();
+        _miStamp.DropDownItems.Add(remove);
+    }
+
+    /// <summary>Ставит подпись: выбор картинки (или из последних) → окно установки → на страницы.</summary>
+    private void AddStamp(string? path)
+    {
+        if (_model == null || _busy) return;
+        var model = _model;
+
+        if (path == null)
+        {
+            using var dlg = new OpenFileDialog { Filter = ImageFilter, Title = "Картинка подписи или печати" };
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            path = dlg.FileName;
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = File.ReadAllBytes(path);
+        }
+        catch (Exception ex)
+        {
+            if (!File.Exists(path)) _recentStamps.Remove(path);
+            ShowError($"Не удалось прочитать файл «{Path.GetFileName(path)}»:\n{ex.Message}");
+            return;
+        }
+
+        var selected = _view.SelectedPageIndices;
+        var pageIndex = selected.Count > 0 ? selected[0] : _view.FocusedItem?.Index ?? 0;
+        using var form = new StampPlacementForm(model, pageIndex, selected, bytes, Path.GetFileName(path));
+        if (form.ShowDialog(this) != DialogResult.OK || form.ProcessedPng == null) return;
+
+        _recentStamps.Add(path);
+        var targets = form.TargetPages;
+        if (RunSafe(() => PdfPageEditor.AddStamp(model, targets, model.AddStampImage(form.ProcessedPng), form.VisibleRect)))
+        {
+            _view.RefreshPages(selected.Count > 0 ? selected : new[] { pageIndex });
+            _lblRender.Text = targets.Count == 1
+                ? "Подпись поставлена. Ctrl+Z — отменить"
+                : $"Подпись поставлена на {targets.Count} стр. Ctrl+Z — отменить";
+        }
+        UpdateUiState();
+    }
+
+    private void RemoveStamps()
+    {
+        var selected = _view.SelectedPageIndices;
+        if (_model == null || !HasSelection(selected)) return;
+        if (RunSafe(() => PdfPageEditor.RemoveStamps(_model, selected)))
+            _view.RefreshPages(selected);
+        UpdateUiState();
     }
 
     // ───────────── Сжатие ─────────────

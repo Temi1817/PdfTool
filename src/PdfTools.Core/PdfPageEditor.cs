@@ -57,12 +57,46 @@ public static class PdfPageEditor
     }
 
     /// <summary>
+    /// Ставит подпись/печать на страницы. <paramref name="visibleRect"/> — место на странице
+    /// так, как её видит пользователь (в долях 0..1); на каждой странице подпись встанет туда же.
+    /// </summary>
+    public static void AddStamp(PdfDocumentModel model, IEnumerable<int> indices, int imageId, PageRect visibleRect)
+    {
+        if (!model.HasStampImage(imageId))
+            throw new PdfToolException(PdfErrorKind.InvalidInput, "Картинка подписи не найдена.");
+        if (visibleRect.Width <= 0 || visibleRect.Height <= 0 || visibleRect.X < -0.001 || visibleRect.Y < -0.001
+            || visibleRect.X + visibleRect.Width > 1.001 || visibleRect.Y + visibleRect.Height > 1.001)
+            throw new PdfToolException(PdfErrorKind.InvalidInput, "Подпись должна целиком помещаться на странице.");
+
+        var selected = model.NormalizeIndices(indices).ToHashSet();
+        var result = model.Pages
+            .Select((p, i) => selected.Contains(i)
+                ? p with { Stamps = p.Stamps.Append(StampGeometry.Create(imageId, visibleRect, model.VisibleRotation(p))).ToList() }
+                : p)
+            .ToList();
+        model.ReplacePages(result);
+    }
+
+    /// <summary>Убирает все подписи и печати с выбранных страниц.</summary>
+    public static void RemoveStamps(PdfDocumentModel model, IEnumerable<int> indices)
+    {
+        var selected = model.NormalizeIndices(indices).ToHashSet();
+        if (!selected.Any(i => model.Pages[i].Stamps.Count > 0))
+            throw new PdfToolException(PdfErrorKind.InvalidInput, "На выбранных страницах нет подписей.");
+
+        var result = model.Pages
+            .Select((p, i) => selected.Contains(i) ? p with { Stamps = Array.Empty<Stamp>() } : p)
+            .ToList();
+        model.ReplacePages(result);
+    }
+
+    /// <summary>
     /// Сохраняет документ в <paramref name="path"/>. Подтверждение перезаписи
     /// исходника — задача UI (см. <see cref="PdfDocumentModel.IsSourceFile"/>).
     /// </summary>
     public static void Save(PdfDocumentModel model, string path)
     {
-        using (var output = new PdfOutput(model.GetSource))
+        using (var output = new PdfOutput(model))
         {
             output.Write(model.Pages, path);
         }

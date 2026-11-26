@@ -4,7 +4,16 @@
 /// Ссылка на одну страницу: из какого исходника, какая по счёту (с 0)
 /// и на сколько градусов её дополнительно повернули (0/90/180/270, по часовой).
 /// </summary>
-public sealed record PageRef(int SourceId, int PageIndex, int Rotation = 0);
+public sealed record PageRef(int SourceId, int PageIndex, int Rotation = 0)
+{
+    /// <summary>Подписи и печати, наложенные на страницу (попадают в файл при сохранении).</summary>
+    public IReadOnlyList<Stamp> Stamps { get; init; } = Array.Empty<Stamp>();
+
+    /// <summary>Ключ внешнего вида страницы — для кэша миниатюр.</summary>
+    public string RenderKey => Stamps.Count == 0
+        ? $"{SourceId}:{PageIndex}:{Rotation}"
+        : $"{SourceId}:{PageIndex}:{Rotation}:{string.Join(";", Stamps.Select(s => s.Key))}";
+}
 
 /// <summary>
 /// Текущий документ в редакторе — упорядоченный список страниц из одного
@@ -17,9 +26,12 @@ public sealed class PdfDocumentModel
     // Доступ к исходникам под замком: фоновый рендер читает их, пока UI добавляет новые
     private readonly object _sync = new();
     private readonly Dictionary<int, PdfSource> _sources = new();
+    // Картинки подписей/печатей (PNG). Не удаляются — на них могут ссылаться шаги отмены
+    private readonly Dictionary<int, byte[]> _stampImages = new();
     private readonly List<List<PageRef>> _undo = new();
     private List<PageRef> _pages = new();
     private int _nextSourceId = 1;
+    private int _nextStampImageId = 1;
 
     /// <summary>Путь, куда документ сохраняется по «Сохранить». Изначально — открытый файл.</summary>
     public string FilePath { get; private set; }
@@ -61,6 +73,39 @@ public sealed class PdfDocumentModel
                 : throw new PdfToolException(PdfErrorKind.InvalidInput, $"Неизвестный исходный файл (id={id}).");
         }
     }
+
+    /// <summary>Запоминает картинку подписи (PNG) и возвращает её номер для <see cref="Stamp"/>.</summary>
+    public int AddStampImage(byte[] png)
+    {
+        ArgumentNullException.ThrowIfNull(png);
+        if (png.Length == 0)
+            throw new PdfToolException(PdfErrorKind.InvalidInput, "Пустая картинка подписи.");
+        lock (_sync)
+        {
+            var id = _nextStampImageId++;
+            _stampImages.Add(id, png);
+            return id;
+        }
+    }
+
+    internal byte[] GetStampImage(int id)
+    {
+        lock (_sync)
+        {
+            return _stampImages.TryGetValue(id, out var png)
+                ? png
+                : throw new PdfToolException(PdfErrorKind.InvalidInput, $"Неизвестная картинка подписи (id={id}).");
+        }
+    }
+
+    internal bool HasStampImage(int id)
+    {
+        lock (_sync) return _stampImages.ContainsKey(id);
+    }
+
+    /// <summary>Как страница видна читателю: её собственный поворот в файле + поворот в редакторе.</summary>
+    public int VisibleRotation(PageRef page) =>
+        PdfOutput.NormalizeRotation(GetSource(page.SourceId).GetPageRotation(page.PageIndex) + page.Rotation);
 
     /// <summary>Совпадает ли путь с одним из исходных файлов (для подтверждения перезаписи).</summary>
     public bool IsSourceFile(string path)
