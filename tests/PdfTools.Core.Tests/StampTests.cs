@@ -107,6 +107,73 @@ public class StampTests : IDisposable
         Assert.Throws<PdfToolException>(() => StampImage.Prepare(new byte[] { 1, 2, 3 }, removeBackground: true));
     }
 
+    // ───────────── Ручная правка: обрезка и ластик ─────────────
+
+    /// <summary>Как на фото печати: круг 200×200 в центре и «лишний текст» слева (прозрачный фон).</summary>
+    private static byte[] SealWithExtraText()
+    {
+        using var bmp = new SKBitmap(new SKImageInfo(400, 300, SKColorType.Rgba8888, SKAlphaType.Unpremul));
+        using (var canvas = new SKCanvas(bmp))
+        {
+            canvas.Clear(SKColors.Transparent);
+            using var ink = new SKPaint { Color = new SKColor(20, 40, 200), IsAntialias = true };
+            canvas.DrawCircle(250, 150, 100, ink);     // печать: x 150..350
+            canvas.DrawRect(5, 140, 40, 20, ink);      // «тель» слева: x 5..45
+        }
+        using var data = bmp.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
+    }
+
+    private static (int W, int H) SizeOf(byte[] png)
+    {
+        using var bmp = SKBitmap.Decode(png);
+        return (bmp.Width, bmp.Height);
+    }
+
+    [Fact]
+    public void Ellipse_crop_keeps_only_round_seal()
+    {
+        var png = SealWithExtraText();
+
+        var cropped = StampImage.Crop(png, 145, 45, 210, 210, CropShape.Ellipse);
+
+        var (w, h) = SizeOf(cropped);
+        Assert.InRange(w, 200, 215);   // только круг (+ небольшой отступ), без «текста» слева
+        Assert.InRange(h, 200, 215);
+        using var bmp = SKBitmap.Decode(cropped);
+        Assert.True(IsBlue(bmp.GetPixel(w / 2, h / 2)));
+    }
+
+    [Fact]
+    public void Rectangle_crop_keeps_selected_part()
+    {
+        var cropped = StampImage.Crop(SealWithExtraText(), 0, 130, 60, 40, CropShape.Rectangle);
+
+        var (w, h) = SizeOf(cropped);
+        Assert.InRange(w, 40, 50);     // только «текст» 40×20
+        Assert.InRange(h, 20, 30);
+    }
+
+    [Fact]
+    public void Eraser_removes_stray_text()
+    {
+        var png = SealWithExtraText();
+        var before = SizeOf(png);
+
+        var erased = StampImage.Erase(png, new[] { (25f, 130f), (25f, 170f) }, radius: 25);
+
+        var (w, _) = SizeOf(erased);
+        Assert.True(w < before.W - 100, $"ширина {w}: «текст» стёрт, осталась печать");
+    }
+
+    [Theory]
+    [InlineData(10, 10, 2, 2)]       // слишком маленькое выделение
+    [InlineData(0, 0, 100, 100)]     // пустой угол — ничего не останется
+    public void Bad_crop_gives_clear_error(int x, int y, int w, int h)
+    {
+        Assert.Throws<PdfToolException>(() => StampImage.Crop(SealWithExtraText(), x, y, w, h, CropShape.Rectangle));
+    }
+
     // ───────────── Место на странице ─────────────
 
     [Theory]

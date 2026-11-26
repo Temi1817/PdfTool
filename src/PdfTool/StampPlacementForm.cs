@@ -16,6 +16,7 @@ internal sealed class StampPlacementForm : Form
     private readonly StampCanvas _canvas = new() { Dock = DockStyle.Fill };
     private readonly ComboBox _target = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 260 };
     private readonly CheckBox _removeBackground = new() { Text = "Убрать белый фон", Checked = true, AutoSize = true };
+    private readonly Button _edit = new() { Text = "✂ Обрезать / стереть…", AutoSize = true, Enabled = false };
     private readonly Label _status = new() { AutoSize = true, ForeColor = SystemColors.GrayText };
     private readonly Button _ok = new() { Text = "Готово", AutoSize = true, DialogResult = DialogResult.OK, Enabled = false };
     private readonly List<IReadOnlyList<int>> _targetPages = new();
@@ -50,6 +51,11 @@ internal sealed class StampPlacementForm : Form
         top.Controls.Add(_target);
         _removeBackground.Margin = new Padding(16, 5, 0, 0);
         top.Controls.Add(_removeBackground);
+        _edit.Margin = new Padding(16, 1, 0, 0);
+        top.Controls.Add(_edit);
+        new ToolTip().SetToolTip(_edit,
+            "Убрать лишнее с картинки: обвести печать кругом, оставить часть рамкой или стереть ластиком.\n" +
+            "Если потом переключить «Убрать белый фон», правки сбросятся.");
 
         var hint = new Label
         {
@@ -68,6 +74,7 @@ internal sealed class StampPlacementForm : Form
         Controls.Add(bottom);
 
         _removeBackground.CheckedChanged += (_, _) => PrepareStamp();
+        _edit.Click += (_, _) => EditStamp();
         Shown += (_, _) => { RenderPage(); PrepareStamp(); };
     }
 
@@ -106,6 +113,7 @@ internal sealed class StampPlacementForm : Form
         var version = ++_prepareVersion;
         var removeBackground = _removeBackground.Checked;
         _ok.Enabled = false;
+        _edit.Enabled = false;
         _status.ForeColor = SystemColors.GrayText;
         _status.Text = "Обработка картинки…";
         try
@@ -116,6 +124,7 @@ internal sealed class StampPlacementForm : Form
             _canvas.SetStamp(ToBitmap(png));
             _status.Text = "";
             _ok.Enabled = true;
+            _edit.Enabled = true;
         }
         catch (Exception ex)
         {
@@ -125,6 +134,16 @@ internal sealed class StampPlacementForm : Form
             _status.ForeColor = Color.DarkRed;
             _status.Text = ex is PdfToolException ? ex.Message.Replace('\n', ' ') : $"Ошибка: {ex.Message}";
         }
+    }
+
+    /// <summary>Ручная правка картинки: обрезка рамкой/кругом, ластик.</summary>
+    private void EditStamp()
+    {
+        if (ProcessedPng == null) return;
+        using var editor = new StampEditForm(ProcessedPng);
+        if (editor.ShowDialog(this) != DialogResult.OK) return;
+        ProcessedPng = editor.Result;
+        _canvas.SetStamp(ToBitmap(ProcessedPng));
     }
 
     private static Bitmap ToBitmap(byte[] png)

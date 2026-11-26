@@ -2,9 +2,17 @@ using SkiaSharp;
 
 namespace PdfTools.Core;
 
+public enum CropShape
+{
+    Rectangle,
+    /// <summary>Овал, вписанный в прямоугольник, — для круглой печати.</summary>
+    Ellipse
+}
+
 /// <summary>
 /// Подготовка картинки подписи или печати: поворот по EXIF, уменьшение,
 /// по желанию — белый (бумажный) фон становится прозрачным, пустые поля обрезаются.
+/// Плюс ручная правка: обрезка рамкой/овалом и ластик.
 /// </summary>
 public static class StampImage
 {
@@ -25,6 +33,89 @@ public static class StampImage
 
         using var trimmed = Trim(bitmap) ?? throw new PdfToolException(PdfErrorKind.InvalidInput,
             "На картинке не найдено подписи — она пустая или слишком светлая.\nПопробуйте без «Убрать белый фон».");
+        using var data = trimmed.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
+    }
+
+    // ───────────── Ручная правка: обрезка и ластик ─────────────
+
+    /// <summary>
+    /// Оставляет только выделенную область (прямоугольник или вписанный в него овал — для круглой печати),
+    /// всё снаружи становится прозрачным. Координаты — в пикселях картинки.
+    /// </summary>
+    public static byte[] Crop(byte[] png, int x, int y, int width, int height, CropShape shape)
+    {
+        using var bmp = DecodeRgba(png);
+        var left = Math.Clamp(x, 0, bmp.Width);
+        var top = Math.Clamp(y, 0, bmp.Height);
+        var right = Math.Clamp(x + width, 0, bmp.Width);
+        var bottom = Math.Clamp(y + height, 0, bmp.Height);
+        if (right - left < 3 || bottom - top < 3)
+            throw new PdfToolException(PdfErrorKind.InvalidInput, "Выделите область побольше.");
+
+        double cx = (left + right) / 2.0, cy = (top + bottom) / 2.0;
+        double rx = (right - left) / 2.0, ry = (bottom - top) / 2.0;
+        var pixels = bmp.Pixels;
+        for (var py = 0; py < bmp.Height; py++)
+        for (var px = 0; px < bmp.Width; px++)
+        {
+            var inside = px >= left && px < right && py >= top && py < bottom;
+            if (inside && shape == CropShape.Ellipse)
+            {
+                double dx = (px + 0.5 - cx) / rx, dy = (py + 0.5 - cy) / ry;
+                inside = dx * dx + dy * dy <= 1;
+            }
+            if (!inside) pixels[py * bmp.Width + px] = SKColors.Transparent;
+        }
+        bmp.Pixels = pixels;
+        return Finish(bmp);
+    }
+
+    /// <summary>Стирает след ластика: линия по точкам (в пикселях картинки) толщиной 2×radius.</summary>
+    public static byte[] Erase(byte[] png, IReadOnlyList<(float X, float Y)> stroke, float radius)
+    {
+        ArgumentNullException.ThrowIfNull(stroke);
+        using var bmp = DecodeRgba(png);
+        if (stroke.Count == 0 || radius <= 0) return png;
+
+        var pixels = bmp.Pixels;
+        void Dot(float cx, float cy)
+        {
+            var r2 = radius * radius;
+            for (var py = Math.Max(0, (int)(cy - radius)); py <= Math.Min(bmp.Height - 1, (int)(cy + radius)); py++)
+            for (var px = Math.Max(0, (int)(cx - radius)); px <= Math.Min(bmp.Width - 1, (int)(cx + radius)); px++)
+            {
+                float dx = px + 0.5f - cx, dy = py + 0.5f - cy;
+                if (dx * dx + dy * dy <= r2) pixels[py * bmp.Width + px] = SKColors.Transparent;
+            }
+        }
+
+        Dot(stroke[0].X, stroke[0].Y);
+        for (var i = 1; i < stroke.Count; i++)
+        {
+            // Точки мыши идут с пропусками — заполняем отрезок между ними
+            var (x0, y0) = stroke[i - 1];
+            var (x1, y1) = stroke[i];
+            var steps = Math.Max(1, (int)(MathF.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)) / Math.Max(1, radius / 2)));
+            for (var s = 1; s <= steps; s++)
+                Dot(x0 + (x1 - x0) * s / steps, y0 + (y1 - y0) * s / steps);
+        }
+        bmp.Pixels = pixels;
+        return Finish(bmp);
+    }
+
+    private static SKBitmap DecodeRgba(byte[] png)
+    {
+        ArgumentNullException.ThrowIfNull(png);
+        using var decoded = SKBitmap.Decode(png)
+            ?? throw new PdfToolException(PdfErrorKind.Corrupted, "Не удалось прочитать картинку подписи.");
+        return ToRgba(decoded, int.MaxValue);
+    }
+
+    private static byte[] Finish(SKBitmap bmp)
+    {
+        using var trimmed = Trim(bmp) ?? throw new PdfToolException(PdfErrorKind.InvalidInput,
+            "После этого от картинки ничего не останется. Выделите другую область.");
         using var data = trimmed.Encode(SKEncodedImageFormat.Png, 100);
         return data.ToArray();
     }
